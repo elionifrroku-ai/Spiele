@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+agent-tools/
+terminals/
+vendor/models/
+vendor/mediapipe/wasm/

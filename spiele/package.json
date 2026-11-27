@@ -1,0 +1,14 @@
+{
+  "name": "spiele",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Spiele — lift a photo cutout into a kindergarten classroom.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 4173 --bind 127.0.0.1",
+    "assets": "python3 scripts/make_assets.py"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.2.3"
+  }
+}
