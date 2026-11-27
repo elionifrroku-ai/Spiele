@@ -1,0 +1,38 @@
+{
+  "id": "./",
+  "name": "Spiele",
+  "short_name": "Spiele",
+  "description": "Lift a child, puppy, animal, or toy from a photo and play in a kindergarten classroom.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6E2C4",
+  "theme_color": "#E07A5F",
+  "icons": [
+    {
+      "src": "./assets/icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
