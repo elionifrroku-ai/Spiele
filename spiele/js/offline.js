@@ -32,8 +32,11 @@ export function registerOffline(onStatus) {
   }
 
   navigator.serviceWorker
-    .register("./sw.js")
-    .then(() => refreshStatus(onStatus))
+    .register("./sw.js?v=3", { updateViaCache: "none" })
+    .then((reg) => {
+      if (reg.update) reg.update();
+      refreshStatus(onStatus);
+    })
     .catch(() =>
       onStatus({
         level: "none",
