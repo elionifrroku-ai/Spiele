@@ -263,6 +263,83 @@ export function canvasToBlob(canvas) {
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 }
 
+export function cropFace(source, nx, ny, radiusNorm) {
+  const { width, height, canvas } = source;
+  const radius = Math.max(14, radiusNorm * Math.min(width, height));
+  const cx = clamp(nx, 0, 1) * width;
+  const cy = clamp(ny, 0, 1) * height;
+  const size = Math.max(64, Math.round(radius * 2));
+  const dest = document.createElement("canvas");
+  dest.width = size;
+  dest.height = size;
+  const ctx = dest.getContext("2d", { willReadFrequently: true });
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 0.5, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(
+    canvas,
+    cx - radius,
+    cy - radius,
+    radius * 2,
+    radius * 2,
+    0,
+    0,
+    size,
+    size
+  );
+  knockOutEdgeFill(dest);
+  return {
+    canvas: dest,
+    width: size,
+    height: size,
+    nx: clamp(nx, 0, 1),
+    ny: clamp(ny, 0, 1),
+    radius: radiusNorm,
+  };
+}
+
+function knockOutEdgeFill(canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const { width, height } = canvas;
+  const img = ctx.getImageData(0, 0, width, height);
+  const data = img.data;
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  const r = Math.min(cx, cy);
+  const samples = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      const i = (y * width + x) * 4;
+      if (data[i + 3] < 8) continue;
+      if (d > r * 0.82 && d < r * 0.98) samples.push(i);
+    }
+  }
+  if (samples.length < 12) return;
+  const channel = (offset) => {
+    const values = samples.map((i) => data[i + offset]).sort((a, b) => a - b);
+    return values[(values.length / 2) | 0];
+  };
+  const mr = channel(0);
+  const mg = channel(1);
+  const mb = channel(2);
+  const tol = 38;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (data[i + 3] < 8) continue;
+      const dist = Math.hypot(data[i] - mr, data[i + 1] - mg, data[i + 2] - mb);
+      const radial = Math.hypot(x - cx, y - cy) / r;
+      if (dist < tol && radial > 0.52) {
+        const fade = Math.min(1, (radial - 0.52) / 0.48) * (1 - dist / tol);
+        data[i + 3] = Math.max(0, Math.round(data[i + 3] * (1 - fade)));
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 function keepSeedComponent(mask, width, height, nx, ny) {
   const sx = clamp(Math.round(nx * (width - 1)), 0, width - 1);
   const sy = clamp(Math.round(ny * (height - 1)), 0, height - 1);

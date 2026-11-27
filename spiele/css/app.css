@@ -248,23 +248,28 @@ input {
 
 .stage {
   position: absolute;
-  inset: 0;
+  inset: 0 0 118px 0;
   z-index: 2;
   touch-action: none;
 }
 
-.cutout {
+.cutout,
+.kid {
   position: absolute;
-  transform: translate(-50%, -80%);
+  transform: translate(-50%, -88%);
   cursor: grab;
   user-select: none;
   touch-action: none;
+}
+
+.cutout {
   padding: 8px;
   min-width: 72px;
   min-height: 72px;
 }
 
-.cutout.selected .sprite {
+.cutout.selected .sprite,
+.kid.selected .kid-figure {
   filter: drop-shadow(0 0 10px #fff) drop-shadow(0 8px 8px rgba(58, 42, 31, 0.35));
 }
 
@@ -278,7 +283,8 @@ input {
   transform-origin: 50% 80%;
 }
 
-.cutout.wiggle .sprite {
+.cutout.wiggle .sprite,
+.kid.wiggle .kid-figure {
   animation: wiggle 0.55s ease-in-out;
 }
 
@@ -295,26 +301,467 @@ input {
   }
 }
 
-.point-hand-wrap {
-  position: absolute;
-  width: 78px;
-  height: 78px;
-  pointer-events: none;
-  transform: translate(28px, -110%);
+.kid {
+  width: 96px;
+  z-index: 2;
 }
 
-.point-hand-wrap[data-side="left"] {
-  transform: translate(-96px, -110%);
+.kid-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 8px 6px rgba(58, 42, 31, 0.28));
 }
 
-.point-hand {
-  width: 78px;
-  height: 78px;
-  background: rgba(255, 250, 240, 0.92);
+.kid-head {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(58, 42, 31, 0.2);
-  transform-origin: 50% 50%;
+  overflow: hidden;
+  background: #f0c7a0;
+  border: 3px solid #fff6ea;
+  box-shadow: 0 2px 0 rgba(58, 42, 31, 0.12);
+  z-index: 4;
+  position: relative;
+}
+
+.kid-face {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
+  pointer-events: none;
+}
+
+.kid-torso {
+  width: 46px;
+  height: 52px;
+  border-radius: 18px 18px 14px 14px;
+  margin-top: -10px;
+  position: relative;
+  z-index: 2;
+}
+
+.arm-socket {
+  position: absolute;
+  top: 10px;
+  width: 0;
+  height: 0;
+  z-index: 1;
+}
+
+.wave-socket {
+  left: 2px;
+}
+
+.point-socket {
+  right: 2px;
+}
+
+.kid-upper {
+  position: absolute;
+  top: 0;
+  width: 15px;
+  height: 30px;
+  border-radius: 10px;
+  transform-origin: 7.5px 5px;
+}
+
+.wave-socket .kid-upper {
+  left: -16px;
+  transform: rotate(var(--shoulder, 32deg));
+}
+
+.point-socket .kid-upper {
+  left: 1px;
+  transform: rotate(var(--shoulder, -32deg));
+}
+
+.kid-forearm {
+  position: absolute;
+  left: 1px;
+  top: 22px;
+  width: 13px;
+  height: 26px;
+  background: #f0c7a0;
+  border-radius: 10px;
+  transform-origin: 6.5px 4px;
+  transform: rotate(var(--elbow, 10deg));
+}
+
+.wave-socket .kid-forearm {
+  transform: rotate(var(--elbow, -8deg));
+}
+
+.kid.pointing:not(.dragging) .kid-upper,
+.kid.pointing:not(.dragging) .kid-forearm {
   transition: transform 0.35s ease;
+}
+
+.kid-hand {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  background: #f0c7a0;
+  border-radius: 50%;
+}
+
+.kid-hand.point-hand {
+  width: 22px;
+  height: 18px;
+  margin-left: -11px;
+  border-radius: 40% 45% 40% 40%;
+  overflow: visible;
+}
+
+.arm-socket:not(.aiming) .finger {
+  display: none;
+}
+
+.arm-socket:not(.aiming) .kid-hand.point-hand {
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+}
+
+.finger {
+  position: absolute;
+  background: #f0c7a0;
+  border-radius: 5px;
+}
+
+.finger.thumb {
+  width: 8px;
+  height: 12px;
+  left: -6px;
+  top: 2px;
+  transform: rotate(-38deg);
+}
+
+.finger.middle {
+  width: 6px;
+  height: 11px;
+  left: 3px;
+  top: 14px;
+}
+
+.finger.index {
+  width: 7px;
+  height: 26px;
+  left: 8px;
+  top: 12px;
+  border-radius: 4px;
+}
+
+.wave-socket .finger.thumb {
+  left: 14px;
+  transform: rotate(38deg);
+}
+
+.wave-socket .finger.index {
+  left: 4px;
+}
+
+.kid-hips {
+  display: flex;
+  gap: 6px;
+  margin-top: -4px;
+  z-index: 1;
+}
+
+.kid-leg {
+  width: 14px;
+  height: 34px;
+  border-radius: 8px;
+  position: relative;
+  transform-origin: 50% 0;
+}
+
+.kid-leg::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  height: 9px;
+  background: #3a2a1f;
+  border-radius: 5px;
+}
+
+.kid.playing-wave .wave-socket .kid-upper {
+  animation: wave-arm 0.7s ease-in-out 2;
+}
+
+.kid.playing-wave .wave-socket .kid-forearm {
+  animation: wave-forearm 0.7s ease-in-out 2;
+}
+
+@keyframes wave-arm {
+  0%,
+  100% {
+    transform: rotate(18deg);
+  }
+  25% {
+    transform: rotate(-80deg);
+  }
+  50% {
+    transform: rotate(-20deg);
+  }
+  75% {
+    transform: rotate(-90deg);
+  }
+}
+
+@keyframes wave-forearm {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(-28deg);
+  }
+}
+
+.kid.playing-jump .kid-figure {
+  animation: jump-body 0.8s ease;
+}
+
+.kid.playing-jump .kid-leg {
+  animation: jump-leg 0.8s ease;
+}
+
+@keyframes jump-body {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  18% {
+    transform: translateY(6px) scale(1.08, 0.88);
+  }
+  42% {
+    transform: translateY(-48px) scale(0.94, 1.08);
+  }
+  70% {
+    transform: translateY(4px) scale(1.06, 0.92);
+  }
+}
+
+@keyframes jump-leg {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  40% {
+    transform: rotate(-8deg);
+  }
+}
+
+.kid.playing-dance .kid-figure {
+  animation: dance-body 0.9s ease-in-out 2;
+}
+
+.kid.playing-dance .wave-socket .kid-upper {
+  animation: dance-arm-l 0.45s ease-in-out 4;
+}
+
+.kid.playing-dance .point-socket .kid-upper {
+  animation: dance-arm-r 0.45s ease-in-out 4;
+}
+
+.kid.playing-dance .kid-leg.left {
+  animation: dance-leg 0.45s ease-in-out 4;
+}
+
+.kid.playing-dance .kid-leg.right {
+  animation: dance-leg 0.45s ease-in-out 4 reverse;
+}
+
+@keyframes dance-body {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  25% {
+    transform: rotate(10deg) translateY(-14px);
+  }
+  50% {
+    transform: rotate(-10deg) translateY(0);
+  }
+  75% {
+    transform: rotate(8deg) translateY(-14px);
+  }
+}
+
+@keyframes dance-arm-l {
+  0%,
+  100% {
+    transform: rotate(20deg);
+  }
+  50% {
+    transform: rotate(-70deg);
+  }
+}
+
+@keyframes dance-arm-r {
+  0%,
+  100% {
+    transform: rotate(-20deg);
+  }
+  50% {
+    transform: rotate(70deg);
+  }
+}
+
+@keyframes dance-leg {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(18deg);
+  }
+}
+
+.move-dock {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.moves {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.moves button {
+  min-height: 52px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  border: 0;
+  border-radius: 16px;
+  background: #fffaf0;
+  color: var(--ink);
+  box-shadow: 0 3px 0 rgba(58, 42, 31, 0.16);
+  touch-action: manipulation;
+  position: relative;
+  z-index: 1;
+}
+
+.moves button:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(58, 42, 31, 0.16);
+}
+
+.sequence-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.sequence-list {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  min-height: 36px;
+}
+
+.seq-chip {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: #3d5a80;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.play-btn {
+  border: 0;
+  border-radius: 14px;
+  min-height: 40px;
+  padding: 0 14px;
+  background: var(--sage);
+  color: #fff;
+  font-weight: 800;
+}
+
+.ghost.mini {
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+.photo-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.crop-layer {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.crop-ring {
+  position: absolute;
+  border: 3px solid #e07a5f;
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(58, 42, 31, 0.32);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+}
+
+.crop-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.crop-size-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#crop-size {
+  flex: 1;
+}
+
+.kid-preview {
+  display: flex;
+  justify-content: center;
+  min-height: 128px;
+  padding-top: 8px;
+}
+
+.kid-preview .kid {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+}
+
+.photo-wrap.cropping {
+  max-height: 34vh;
+}
+
+.photo-wrap.cropping canvas {
+  max-height: 34vh;
 }
 
 .empty-hint,
@@ -394,7 +841,7 @@ input {
 }
 
 .overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(58, 42, 31, 0.38);
   z-index: 10;
@@ -416,6 +863,7 @@ input {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
 }
 
 .sheet h2 {

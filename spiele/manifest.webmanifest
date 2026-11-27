@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Spiele",
   "short_name": "Spiele",
-  "description": "Lift a child, puppy, animal, or toy from a photo and play in a kindergarten classroom.",
+  "description": "Make a cartoon child from a photo face and play Wave, Jump, Dance, and Point in a kindergarten classroom.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

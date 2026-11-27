@@ -1,6 +1,14 @@
+import {
+  aimPointingArm,
+  clearPointing,
+  createKidElement,
+  fillKidPreview,
+  MOVE_MS,
+} from "./character.js";
 import { deleteCutout, listCutouts, newId, saveCutout } from "./db.js";
 import {
   canvasToBlob,
+  cropFace,
   loadImageFile,
   loadImageUrl,
   tapCutout,
@@ -15,6 +23,12 @@ const overlay = document.getElementById("overlay");
 const fileInput = document.getElementById("file-input");
 const photoCanvas = document.getElementById("photo-canvas");
 const photoWrap = document.getElementById("photo-wrap");
+const cropLayer = document.getElementById("crop-layer");
+const cropRing = document.getElementById("crop-ring");
+const cropTools = document.getElementById("crop-tools");
+const cropSize = document.getElementById("crop-size");
+const cropActions = document.getElementById("crop-actions");
+const kidPreview = document.getElementById("kid-preview");
 const traceCanvas = document.getElementById("trace-canvas");
 const busy = document.getElementById("busy");
 const emptyHint = document.getElementById("empty-hint");
@@ -29,15 +43,7 @@ const tapActions = document.getElementById("tap-actions");
 const previewActions = document.getElementById("preview-actions");
 const traceActions = document.getElementById("trace-actions");
 const kindActions = document.getElementById("kind-actions");
-
-const POINT_HAND_SVG = `
-  <svg class="point-hand" viewBox="0 0 64 64" aria-hidden="true">
-    <path fill="#f0c7a0" stroke="#c48b6a" stroke-width="2"
-      d="M10 38c0-6 5-10 12-10h8c2-8 6-16 12-18 4-1 8 2 8 6 0 3-2 6-4 10 6-1 12 3 12 9 0 3-2 6-5 8 5 1 8 5 8 9 0 6-6 10-14 10H24c-8 0-14-6-14-14z"/>
-    <path fill="#f0c7a0" stroke="#c48b6a" stroke-width="2"
-      d="M42 12c2-6 8-10 16-8 3 1 4 5 2 8-3 6-10 10-16 12z"/>
-  </svg>
-`;
+const sequenceList = document.getElementById("sequence-list");
 
 const state = {
   cutouts: [],
@@ -51,6 +57,12 @@ const state = {
   dragging: null,
   selectedId: null,
   targetId: null,
+  crop: { nx: 0.5, ny: 0.38, radius: 0.13 },
+  cropDrag: null,
+  sequence: [],
+  playing: false,
+  previewFaceUrl: null,
+  waitForPointTarget: false,
 };
 
 registerOffline((status) => {
@@ -64,6 +76,7 @@ if (!window.matchMedia("(display-mode: standalone)").matches && !navigator.stand
 
 warmupTapMagic();
 refreshFromDb();
+renderSequence();
 
 document.getElementById("add-photo").addEventListener("click", () => {
   openChooser();
@@ -94,6 +107,8 @@ document.getElementById("try-again").addEventListener("click", () => {
   beginTap(state.source);
 });
 document.getElementById("use-cutout").addEventListener("click", () => askKind());
+document.getElementById("use-face").addEventListener("click", () => commitChildFromCrop());
+document.getElementById("lift-friend").addEventListener("click", liftFriendFromTap);
 document.getElementById("finish-trace").addEventListener("click", finishTrace);
 document.getElementById("clear-trace").addEventListener("click", () => {
   state.tracePoints = [];
@@ -101,6 +116,31 @@ document.getElementById("clear-trace").addEventListener("click", () => {
 });
 document.getElementById("kind-child").addEventListener("click", () => commitCutout("child"));
 document.getElementById("kind-friend").addEventListener("click", () => commitCutout("friend"));
+document.getElementById("play-moves").addEventListener("click", () => playSequence());
+document.getElementById("clear-moves").addEventListener("click", () => {
+  state.sequence = [];
+  renderSequence();
+});
+document.querySelector(".moves").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-move]");
+  if (!btn) return;
+  addMove(btn.dataset.move);
+});
+sequenceList.addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-index]");
+  if (!chip) return;
+  state.sequence.splice(Number(chip.dataset.index), 1);
+  renderSequence();
+});
+
+cropSize.addEventListener("input", () => {
+  state.crop.radius = Number(cropSize.value) / 100;
+  scheduleCropPreview();
+});
+cropLayer.addEventListener("pointerdown", onCropPointer, { passive: false });
+cropLayer.addEventListener("pointermove", onCropPointer, { passive: false });
+cropLayer.addEventListener("pointerup", onCropPointer, { passive: false });
+cropLayer.addEventListener("pointercancel", onCropPointer, { passive: false });
 
 photoCanvas.addEventListener("pointerdown", onPhotoTap, { passive: false });
 traceCanvas.addEventListener("pointerdown", onTracePointer, { passive: false });
@@ -128,14 +168,19 @@ function openChooser() {
   tapActions.hidden = false;
   document.getElementById("start-trace").hidden = true;
   previewActions.hidden = true;
+  cropActions.hidden = true;
+  cropTools.hidden = true;
+  cropLayer.hidden = true;
+  kidPreview.hidden = true;
   traceActions.hidden = true;
   kindActions.hidden = true;
   traceCanvas.hidden = true;
   busy.hidden = true;
   photoWrap.hidden = true;
+  photoWrap.classList.remove("cropping");
   sheetTitle.textContent = "Add from a photo";
   sheetCopy.textContent =
-    "Choose a photo from this iPhone, or try a sample. Then tap who to lift.";
+    "Choose a photo from this iPhone, or try a sample. Tap a face to make a child, or lift a puppy or toy.";
   clearCanvas(photoCanvas);
 }
 
@@ -149,15 +194,45 @@ function beginTap(source) {
   tapActions.hidden = false;
   document.getElementById("start-trace").hidden = false;
   previewActions.hidden = true;
+  cropActions.hidden = true;
+  cropTools.hidden = true;
+  cropLayer.hidden = true;
+  kidPreview.hidden = true;
   traceActions.hidden = true;
   kindActions.hidden = true;
   traceCanvas.hidden = true;
   busy.hidden = true;
   photoWrap.hidden = false;
-  sheetTitle.textContent = "Tap who to lift";
+  photoWrap.classList.remove("cropping");
+  sheetTitle.textContent = "Tap a face or a toy";
   sheetCopy.textContent =
-    "If two children are in the photo, tap just one. Tracing is there if tap misses.";
+    "Tap one face, then drag the circle to fit. Pets and toys stay as scene partners.";
   drawSource(source);
+}
+
+function beginCrop(nx, ny) {
+  state.mode = "crop";
+  state.crop.nx = nx;
+  state.crop.ny = ny;
+  state.crop.radius = Number(cropSize.value) / 100;
+  sampleRow.hidden = true;
+  pickDevice.hidden = true;
+  tapActions.hidden = false;
+  document.getElementById("start-trace").hidden = false;
+  previewActions.hidden = true;
+  cropActions.hidden = false;
+  cropTools.hidden = false;
+  cropLayer.hidden = false;
+  kidPreview.hidden = false;
+  traceActions.hidden = true;
+  kindActions.hidden = true;
+  traceCanvas.hidden = true;
+  photoWrap.classList.add("cropping");
+  sheetTitle.textContent = "Adjust the face";
+  sheetCopy.textContent =
+    "Drag the circle and use Face size until it sits on the head. Then make a child, or lift a puppy or toy.";
+  updateCropRing();
+  updateCropPreview();
 }
 
 function beginTrace() {
@@ -168,9 +243,14 @@ function beginTrace() {
   pickDevice.hidden = true;
   tapActions.hidden = true;
   previewActions.hidden = true;
+  cropActions.hidden = true;
+  cropTools.hidden = true;
+  cropLayer.hidden = true;
+  kidPreview.hidden = true;
   traceActions.hidden = false;
   kindActions.hidden = true;
   traceCanvas.hidden = false;
+  photoWrap.classList.remove("cropping");
   sheetTitle.textContent = "Trace with your finger";
   sheetCopy.textContent =
     "Draw all the way around the person or toy, then lift your finger.";
@@ -183,17 +263,59 @@ async function onPhotoTap(event) {
   if (state.mode !== "tap" || !state.source) return;
   event.preventDefault();
   const { nx, ny } = canvasPoint(photoCanvas, event);
-  busy.hidden = false;
-  busy.textContent = "Lifting…";
-  await new Promise((r) => requestAnimationFrame(r));
-  const cut = await tapCutout(state.source, nx, ny);
-  busy.hidden = true;
-  if (!cut) {
-    sheetCopy.textContent =
-      "Could not lift that spot. Try tapping the middle, or trace with your finger.";
+  beginCrop(nx, ny);
+}
+
+function onCropPointer(event) {
+  if (state.mode !== "crop") return;
+  event.preventDefault();
+  const { nx, ny } = canvasPoint(photoCanvas, event);
+  if (event.type === "pointerdown") {
+    cropLayer.setPointerCapture(event.pointerId);
+    state.cropDrag = { pointerId: event.pointerId };
+    state.crop.nx = nx;
+    state.crop.ny = ny;
+    scheduleCropPreview();
     return;
   }
-  showPreview(cut);
+  if (event.type === "pointermove" && state.cropDrag && event.pointerId === state.cropDrag.pointerId) {
+    state.crop.nx = nx;
+    state.crop.ny = ny;
+    scheduleCropPreview();
+    return;
+  }
+  if (event.type === "pointerup" || event.type === "pointercancel") {
+    state.cropDrag = null;
+  }
+}
+
+let cropRaf = 0;
+function scheduleCropPreview() {
+  updateCropRing();
+  if (cropRaf) return;
+  cropRaf = requestAnimationFrame(() => {
+    cropRaf = 0;
+    updateCropPreview();
+  });
+}
+
+function updateCropRing() {
+  const rect = photoCanvas.getBoundingClientRect();
+  const radiusPx = state.crop.radius * Math.min(rect.width, rect.height);
+  cropRing.style.width = `${Math.max(36, radiusPx * 2)}px`;
+  cropRing.style.height = `${Math.max(36, radiusPx * 2)}px`;
+  cropRing.style.left = `${state.crop.nx * 100}%`;
+  cropRing.style.top = `${state.crop.ny * 100}%`;
+}
+
+function updateCropPreview() {
+  if (!state.source || state.mode !== "crop") return;
+  const face = cropFace(state.source, state.crop.nx, state.crop.ny, state.crop.radius);
+  if (state.previewFaceUrl) URL.revokeObjectURL(state.previewFaceUrl);
+  state.previewFaceUrl = URL.createObjectURL(
+    dataUrlToBlob(face.canvas.toDataURL("image/png"))
+  );
+  fillKidPreview(kidPreview, state.previewFaceUrl);
 }
 
 function showPreview(cut) {
@@ -203,9 +325,14 @@ function showPreview(cut) {
   pickDevice.hidden = true;
   tapActions.hidden = true;
   previewActions.hidden = false;
+  cropActions.hidden = true;
+  cropTools.hidden = true;
+  cropLayer.hidden = true;
+  kidPreview.hidden = true;
   traceActions.hidden = true;
   kindActions.hidden = true;
   traceCanvas.hidden = true;
+  photoWrap.classList.remove("cropping");
   sheetTitle.textContent = "Is this the one?";
   sheetCopy.textContent = "Use cutout if it looks right. Try again or trace if two subjects merged.";
   const ctx = photoCanvas.getContext("2d");
@@ -221,7 +348,29 @@ function askKind() {
   previewActions.hidden = true;
   kindActions.hidden = false;
   sheetTitle.textContent = "Who did you lift?";
-  sheetCopy.textContent = "Only a child can point. A puppy, animal, or toy can be pointed at.";
+  sheetCopy.textContent = "A child gets a cartoon body. A puppy, animal, or toy can be a partner.";
+}
+
+async function liftFriendFromTap() {
+  if (!state.source) return;
+  busy.hidden = false;
+  busy.textContent = "Lifting…";
+  await new Promise((r) => requestAnimationFrame(r));
+  const cut = await tapCutout(state.source, state.crop.nx, state.crop.ny);
+  busy.hidden = true;
+  if (!cut) {
+    sheetCopy.textContent =
+      "Could not lift that spot. Try tapping the middle, or trace with your finger.";
+    return;
+  }
+  showPreview(cut);
+}
+
+async function commitChildFromCrop() {
+  if (!state.source) return;
+  const face = cropFace(state.source, state.crop.nx, state.crop.ny, state.crop.radius);
+  state.preview = face;
+  await commitCutout("child");
 }
 
 async function commitCutout(kind) {
@@ -238,6 +387,10 @@ async function commitCutout(kind) {
     y: 82,
     createdAt: Date.now(),
   };
+  if (kind === "child") {
+    cutout.body = "cartoon";
+    cutout.crop = { ...state.crop };
+  }
   await saveCutout(cutout);
   closeSheet();
   await refreshFromDb();
@@ -249,6 +402,12 @@ function closeSheet() {
   state.source = null;
   state.preview = null;
   state.tracePoints = [];
+  photoWrap.classList.remove("cropping");
+  if (state.previewFaceUrl) {
+    URL.revokeObjectURL(state.previewFaceUrl);
+    state.previewFaceUrl = null;
+  }
+  kidPreview.replaceChildren();
 }
 
 function finishTrace() {
@@ -334,8 +493,8 @@ function clearCanvas(canvas) {
 function canvasPoint(canvas, event) {
   const rect = canvas.getBoundingClientRect();
   return {
-    nx: (event.clientX - rect.left) / rect.width,
-    ny: (event.clientY - rect.top) / rect.height,
+    nx: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+    ny: clamp((event.clientY - rect.top) / rect.height, 0, 1),
   };
 }
 
@@ -344,25 +503,20 @@ function renderClassroom() {
   state.objectUrls.clear();
   stage.replaceChildren();
   emptyHint.hidden = state.cutouts.length > 0;
-  playHint.hidden = state.cutouts.length < 2;
+  playHint.hidden = state.cutouts.length < 1;
   for (const cutout of state.cutouts) {
     const url = URL.createObjectURL(cutout.blob);
     state.objectUrls.set(cutout.id, url);
-    const el = document.createElement("div");
-    el.className = "cutout";
-    el.dataset.id = cutout.id;
+    const el =
+      cutout.kind === "child"
+        ? createKidElement(cutout, url, { selected: state.selectedId === cutout.id })
+        : createFriendElement(cutout, url);
     el.style.left = `${cutout.x}%`;
     el.style.top = `${cutout.y}%`;
     el.style.zIndex = String(
       Math.round(cutout.y) + (state.selectedId === cutout.id ? 200 : 0)
     );
     if (state.selectedId === cutout.id) el.classList.add("selected");
-    const img = document.createElement("img");
-    img.className = "sprite";
-    img.alt = cutout.kind === "child" ? "Child" : "Friend";
-    img.draggable = false;
-    img.src = url;
-    el.appendChild(img);
     el.addEventListener("pointerdown", (event) => onCutoutDown(event, cutout, el));
     el.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -371,30 +525,21 @@ function renderClassroom() {
     });
     stage.appendChild(el);
   }
-  const pointer = state.cutouts.find((c) => c.id === state.selectedId);
-  const target = state.cutouts.find((c) => c.id === state.targetId);
-  if (pointer && target) {
-    const wrap = document.createElement("div");
-    wrap.className = "point-hand-wrap";
-    const angle = pointingAngle(pointer, target);
-    const towardRight = Math.cos(angle) >= 0;
-    const rest = -Math.PI / 4;
-    wrap.style.left = `${pointer.x}%`;
-    wrap.style.top = `${pointer.y}%`;
-    wrap.style.zIndex = "400";
-    wrap.dataset.side = towardRight ? "right" : "left";
-    wrap.insertAdjacentHTML("beforeend", POINT_HAND_SVG);
-    const hand = wrap.querySelector(".point-hand");
-    hand.style.transform = `rotate(${angle - rest}rad)`;
-    hand.dataset.angle = String(angle);
-    stage.appendChild(wrap);
-  }
+  updatePointingLive();
 }
 
-function pointingAngle(from, to) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  return Math.atan2(dy, dx);
+function createFriendElement(cutout, url) {
+  const el = document.createElement("div");
+  el.className = "cutout";
+  el.dataset.id = cutout.id;
+  el.dataset.kind = "friend";
+  const img = document.createElement("img");
+  img.className = "sprite";
+  img.alt = "Friend";
+  img.draggable = false;
+  img.src = url;
+  el.appendChild(img);
+  return el;
 }
 
 function renderTray() {
@@ -410,7 +555,9 @@ function renderTray() {
       await deleteCutout(cutout.id);
       if (state.selectedId === cutout.id) state.selectedId = null;
       if (state.targetId === cutout.id) state.targetId = null;
+      state.sequence = state.sequence.filter((move) => move.targetId !== cutout.id);
       await refreshFromDb();
+      renderSequence();
     });
     tray.appendChild(btn);
   }
@@ -446,7 +593,9 @@ function onStageMove(event) {
     el.style.left = `${cutout.x}%`;
     el.style.top = `${cutout.y}%`;
     el.style.zIndex = String(Math.round(cutout.y));
+    el.classList.add("dragging");
   }
+  updatePointingLive();
 }
 
 async function onStageUp(event) {
@@ -454,10 +603,13 @@ async function onStageUp(event) {
   const drag = state.dragging;
   state.dragging = null;
   const cutout = state.cutouts.find((c) => c.id === drag.id);
+  const el = cutout && stage.querySelector(`[data-id="${cutout.id}"]`);
+  if (el) el.classList.remove("dragging");
   if (!cutout) return;
   if (drag.moved) {
     state.skipClick = true;
     await saveCutout(cutout);
+    updatePointingLive();
     return;
   }
   handlePointTap(cutout);
@@ -465,12 +617,23 @@ async function onStageUp(event) {
 }
 
 function handlePointTap(cutout) {
+  if (state.waitForPointTarget && state.selectedId && state.selectedId !== cutout.id) {
+    state.targetId = cutout.id;
+    state.waitForPointTarget = false;
+    const last = state.sequence[state.sequence.length - 1];
+    if (last && last.type === "point") last.targetId = cutout.id;
+    playHint.hidden = false;
+    playHint.textContent = "They're pointing! Drag anyone — the hand stays on the arm.";
+    renderClassroom();
+    wiggle(cutout.id);
+    return;
+  }
   if (state.selectedId && state.selectedId !== cutout.id) {
     const pointer = state.cutouts.find((c) => c.id === state.selectedId);
     if (pointer && pointer.kind === "child") {
       state.targetId = cutout.id;
       playHint.hidden = false;
-      playHint.textContent = "They're pointing! Tap someone else to turn the hand.";
+      playHint.textContent = "They're pointing! Drag anyone — the hand stays on the arm.";
       renderClassroom();
       wiggle(cutout.id);
       return;
@@ -484,8 +647,129 @@ function handlePointTap(cutout) {
   state.selectedId = cutout.id;
   state.targetId = null;
   playHint.hidden = false;
-  playHint.textContent = "Now tap who they point to.";
+  playHint.textContent = "Now tap who they point to, or add Wave, Jump, Dance, Point.";
   renderClassroom();
+}
+
+function selectedChild() {
+  return (
+    state.cutouts.find((c) => c.id === state.selectedId && c.kind === "child") ||
+    state.cutouts.find((c) => c.kind === "child")
+  );
+}
+
+function addMove(type) {
+  const kid = selectedChild();
+  if (!kid) {
+    playHint.hidden = false;
+    playHint.textContent = "Add a child from a photo first, then add moves.";
+    return;
+  }
+  state.selectedId = kid.id;
+  const move = { type };
+  if (type === "point") {
+    if (!state.targetId) {
+      state.waitForPointTarget = true;
+      playHint.hidden = false;
+      playHint.textContent = "Tap a puppy, toy, or friend. The arm will point at them.";
+    } else {
+      move.targetId = state.targetId;
+    }
+  }
+  state.sequence.push(move);
+  renderSequence();
+  if (type !== "point" || move.targetId) {
+    playHint.hidden = false;
+    playHint.textContent = "Moves added. Tap Play to replay them.";
+  }
+  if (!state.playing && !(type === "point" && !state.targetId)) {
+    const el = stage.querySelector(`.kid[data-id="${kid.id}"]`);
+    if (el) playMove(el, kid, move);
+  }
+}
+
+function renderSequence() {
+  sequenceList.replaceChildren();
+  state.sequence.forEach((move, index) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "seq-chip";
+    chip.dataset.index = String(index);
+    chip.textContent = `${index + 1}. ${labelFor(move.type)}`;
+    chip.title = "Remove this move";
+    sequenceList.appendChild(chip);
+  });
+}
+
+function labelFor(type) {
+  return { wave: "Wave", jump: "Jump", dance: "Dance", point: "Point" }[type] || type;
+}
+
+async function playSequence() {
+  if (state.playing) return;
+  const kid = selectedChild();
+  if (!kid) {
+    playHint.hidden = false;
+    playHint.textContent = "Add a child from a photo first.";
+    return;
+  }
+  if (!state.sequence.length) {
+    playHint.hidden = false;
+    playHint.textContent = "Add Wave, Jump, Dance, or Point, then Play.";
+    return;
+  }
+  state.selectedId = kid.id;
+  state.playing = true;
+  playHint.hidden = false;
+  playHint.textContent = "Playing your moves…";
+  const el = stage.querySelector(`.kid[data-id="${kid.id}"]`);
+  if (!el) {
+    state.playing = false;
+    return;
+  }
+  for (const move of state.sequence) {
+    await playMove(el, kid, move);
+  }
+  state.playing = false;
+  playHint.textContent = "Tap Play to replay, or add more moves.";
+}
+
+function playMove(el, kid, move) {
+  return new Promise((resolve) => {
+    el.classList.remove("playing-wave", "playing-jump", "playing-dance", "playing-point");
+    void el.offsetWidth;
+    if (move.type !== "point") clearPointing(el);
+    if (move.type === "point") {
+      const target =
+        state.cutouts.find((c) => c.id === (move.targetId || state.targetId)) ||
+        state.cutouts.find((c) => c.id !== kid.id);
+      if (target) {
+        state.targetId = target.id;
+        const targetEl = stage.querySelector(`[data-id="${target.id}"]`);
+        el.classList.add("playing-point");
+        if (targetEl) aimPointingArm(el, targetEl, stage);
+        wiggle(target.id);
+      }
+    } else {
+      el.classList.add(`playing-${move.type}`);
+    }
+    setTimeout(() => {
+      el.classList.remove(`playing-${move.type}`);
+      resolve();
+    }, MOVE_MS[move.type] || 800);
+  });
+}
+
+function updatePointingLive() {
+  const pointer = state.cutouts.find((c) => c.id === state.selectedId);
+  const target = state.cutouts.find((c) => c.id === state.targetId);
+  if (!pointer || !target || pointer.kind !== "child") return;
+  const kidEl = stage.querySelector(`.kid[data-id="${pointer.id}"]`);
+  const targetEl = stage.querySelector(`[data-id="${target.id}"]`);
+  if (kidEl && targetEl) {
+    kidEl.classList.toggle("dragging", Boolean(state.dragging));
+    aimPointingArm(kidEl, targetEl, stage);
+  }
 }
 
 function wiggle(id) {
@@ -494,6 +778,15 @@ function wiggle(id) {
   el.classList.remove("wiggle");
   void el.offsetWidth;
   el.classList.add("wiggle");
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, body] = dataUrl.split(",");
+  const mime = /data:(.*?);/.exec(header)[1];
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 }
 
 function clamp(v, a, b) {

@@ -48,6 +48,19 @@
         <p id="play-hint" class="play-hint" hidden>
           Tap a child, then tap who they point to.
         </p>
+        <div class="move-dock">
+          <div id="sequence-row" class="sequence-row">
+            <div id="sequence-list" class="sequence-list" aria-label="Moves in order"></div>
+            <button id="play-moves" class="play-btn" type="button">Play</button>
+            <button id="clear-moves" class="ghost mini" type="button">Clear</button>
+          </div>
+          <div class="moves" aria-label="Kid moves">
+            <button type="button" data-move="wave">Wave</button>
+            <button type="button" data-move="jump">Jump</button>
+            <button type="button" data-move="dance">Dance</button>
+            <button type="button" data-move="point">Point</button>
+          </div>
+        </div>
       </section>
 
       <footer class="dock">
@@ -64,10 +77,20 @@
         <h2 id="sheet-title">Lift someone out</h2>
         <p id="sheet-copy">Tap the child, puppy, animal, or toy you want.</p>
         <div id="photo-wrap" class="photo-wrap">
-          <canvas id="photo-canvas"></canvas>
-          <canvas id="trace-canvas" hidden></canvas>
+          <div id="photo-frame" class="photo-frame">
+            <canvas id="photo-canvas"></canvas>
+            <canvas id="trace-canvas" hidden></canvas>
+            <div id="crop-layer" class="crop-layer" hidden>
+              <div id="crop-ring" class="crop-ring"></div>
+            </div>
+          </div>
           <div id="busy" class="busy" hidden>Lifting…</div>
         </div>
+        <div id="crop-tools" class="crop-tools" hidden>
+          <label class="crop-size-label" for="crop-size">Face size</label>
+          <input id="crop-size" type="range" min="8" max="24" value="11" />
+        </div>
+        <div id="kid-preview" class="kid-preview" hidden></div>
         <button id="pick-device" class="primary" type="button">Choose from this iPhone</button>
         <div id="sample-row" class="samples">
           <button type="button" data-sample="./assets/samples/two-children.png">Two children</button>
@@ -77,6 +100,10 @@
         <div id="tap-actions" class="actions">
           <button id="start-trace" class="ghost" type="button">Trace with your finger</button>
           <button id="cancel-sheet" class="ghost" type="button">Cancel</button>
+        </div>
+        <div id="crop-actions" class="actions" hidden>
+          <button id="use-face" class="primary" type="button">Make this child</button>
+          <button id="lift-friend" class="ghost" type="button">This is a puppy or toy</button>
         </div>
         <div id="preview-actions" class="actions" hidden>
           <button id="use-cutout" class="primary" type="button">Use cutout</button>
@@ -95,23 +122,6 @@
         </div>
       </div>
     </div>
-
-    <svg width="0" height="0" aria-hidden="true">
-      <symbol id="pointing-hand" viewBox="0 0 64 64">
-        <path
-          fill="#f0c7a0"
-          stroke="#c48b6a"
-          stroke-width="2"
-          d="M10 38c0-6 5-10 12-10h8c2-8 6-16 12-18 4-1 8 2 8 6 0 3-2 6-4 10 6-1 12 3 12 9 0 3-2 6-5 8 5 1 8 5 8 9 0 6-6 10-14 10H24c-8 0-14-6-14-14z"
-        />
-        <path
-          fill="#f0c7a0"
-          stroke="#c48b6a"
-          stroke-width="2"
-          d="M42 12c2-6 8-10 16-8 3 1 4 5 2 8-3 6-10 10-16 12z"
-        />
-      </symbol>
-    </svg>
 
     <script type="module" src="./js/app.js"></script>
   </body>
