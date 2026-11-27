@@ -1,4 +1,4 @@
-const CACHE = "spiele-v2";
+const CACHE = "spiele-v3";
 
 const PRECACHE = [
   "./",
@@ -8,6 +8,7 @@ const PRECACHE = [
   "./js/app.js",
   "./js/db.js",
   "./js/extract.js",
+  "./js/character.js",
   "./js/offline.js",
   "./assets/icons/icon-180.png",
   "./assets/icons/icon-192.png",

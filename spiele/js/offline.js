@@ -1,4 +1,4 @@
-const CACHE = "spiele-v2";
+const CACHE = "spiele-v3";
 
 const SHELL = [
   "./",
@@ -8,6 +8,7 @@ const SHELL = [
   "./js/app.js",
   "./js/db.js",
   "./js/extract.js",
+  "./js/character.js",
   "./js/offline.js",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
@@ -31,8 +32,11 @@ export function registerOffline(onStatus) {
   }
 
   navigator.serviceWorker
-    .register("./sw.js")
-    .then(() => refreshStatus(onStatus))
+    .register("./sw.js?v=3", { updateViaCache: "none" })
+    .then((reg) => {
+      if (reg.update) reg.update();
+      refreshStatus(onStatus);
+    })
     .catch(() =>
       onStatus({
         level: "none",
